@@ -3,6 +3,7 @@ import uuid
 import httpx
 import struct
 import websockets
+import mimetypes
 from PIL import Image
 from io import BytesIO
 from pathlib import Path
@@ -63,23 +64,42 @@ class ComfyClient:
     async def ensure_images_uploaded(self, workflow):
         for node, key, value in workflow.iter_uploads():
             result = await self.upload_image(value)
-            node.inputs[key] = result["name"]
+            # update node input with the path relative to input folder (name + subfolder)
+            if result.get("subfolder"):
+                node.inputs[key] = f"{result['subfolder']}/{result['name']}"
+            else:
+                node.inputs[key] = result["name"]
 
-    async def upload_image(self, image: Union[str, Path, bytes], filename: str | None = None, overwrite: bool = True) -> Dict[str, Any]:
+    async def upload_image(
+        self,
+        image: Union[str, Path, bytes, Image.Image],
+        subfolder: str = "comfyflow",
+        type: str = "input"
+    ) -> Dict[str, Any]:
         url = f"http://{self.server_address}/upload/image"
 
-        files = {}
+        filename = None
         if isinstance(image, (str, Path)):
             path = Path(image)
-            if not filename:
-                filename = path.name
-            files = {"image": (filename, open(path, "rb"), "image/png")}
-        else:
-            if not filename:
-                filename = f"upload_{uuid.uuid4()}.png"
-            files = {"image": (filename, BytesIO(image), "image/png")}
+            filename = path.name
+            content = open(path, "rb")
+            mime_type = mimetypes.guess_type(filename)[0] or "image/png"
+        elif isinstance(image, Image.Image):
+            filename = f"upload_{uuid.uuid4()}.png"
+            fmt = "PNG"
 
-        data = {"overwrite": "true" if overwrite else "false"}
+            buf = BytesIO()
+            image.save(buf, format=fmt)
+            buf.seek(0)
+            content = buf
+            mime_type = "image/png"
+        else:
+            filename = f"upload_{uuid.uuid4()}.png"
+            content = BytesIO(image)
+            mime_type = "image/png"
+
+        files = {"image": (filename, content, mime_type)}
+        data = {"overwrite": "true", "type": type, "subfolder": subfolder}
 
         async with httpx.AsyncClient() as client:
             response = await client.post(url, files=files, data=data)
@@ -131,9 +151,11 @@ class ComfyClient:
                 if msg["type"] == "executing":
                     current_node_id = msg["data"]["node"]
                     if current_node_id is None and msg["data"]["prompt_id"] == prompt_id:
-                        break # Execution finished
+                        break # execution finished
 
                 if msg["type"] == "executed" and msg["data"]["prompt_id"] == prompt_id:
                     node_id = msg["data"]["node"]
-                    async for image in fetch_images(client, msg["data"]["output"]):
-                        yield str(node_id), image
+                    output = msg["data"]["output"]
+                    if output:
+                        async for image in fetch_images(client, output):
+                            yield str(node_id), image

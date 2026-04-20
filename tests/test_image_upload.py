@@ -76,8 +76,32 @@ async def test_explicit_upload(mock_client):
     
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=200)
-        mock_post.return_value.json.return_value = {"name": "test_uploaded.png"}
+        mock_post.return_value.json.return_value = {"name": "test_uploaded.png", "subfolder": "comfyflow"}
         
-        res = await client.upload_image(b"fake_bytes", filename="test.png")
+        res = await client.upload_image(b"fake_bytes")
         assert res["name"] == "test_uploaded.png"
         mock_post.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_pil_image_upload():
+    from PIL import Image
+    from comfyflow.client import ComfyClient
+    client = ComfyClient()
+    
+    img = Image.new("RGB", (64, 64), color="red")
+    
+    with patch("httpx.AsyncClient.post") as mock_post:
+        mock_post.return_value = MagicMock(status_code=200)
+        mock_post.return_value.json.return_value = {"name": "pil_upload.png", "subfolder": "comfyflow"}
+        
+        res = await client.upload_image(img)
+        assert res["name"] == "pil_upload.png"
+        
+        # verify it sent multipart data
+        call_args = mock_post.call_args
+        assert "files" in call_args.kwargs
+        files = call_args.kwargs["files"]
+        assert "image" in files
+        assert files["image"][0].startswith("upload_")
+        assert files["image"][0].endswith(".png")
+        assert files["image"][2] == "image/png"

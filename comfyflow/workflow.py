@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Union, Tuple
 from pathlib import Path
+from PIL import Image
 from .client import ComfyClient
 from .models import NodeSchema, NodeInstance, NodeOutputs
 
@@ -10,7 +11,7 @@ def is_image_upload_field(input_info: Any) -> bool:
     return isinstance(metadata, dict) and metadata.get("image_upload") is True
 
 def is_local_resource(value: Any) -> bool:
-    if isinstance(value, (Path, bytes)):
+    if isinstance(value, (Path, bytes, Image.Image)):
         return True
     if isinstance(value, str):
         try:
