@@ -1,0 +1,48 @@
+[project]
+name = "comfyflow"
+version = "0.1.0"
+description = "A fluent, type-safe Python API for building and executing ComfyUI workflows."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "ComfyFlow Contributors" }
+]
+keywords = ["comfyui", "stable-diffusion", "workflow", "api", "generative-ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Graphics",
+]
+dependencies = [
+    "httpx>=0.28.1",
+    "pillow>=11.0.0",
+    "websockets>=14.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/tcheng/ComfyFlow"
+Repository = "https://github.com/tcheng/ComfyFlow"
+Issues = "https://github.com/tcheng/ComfyFlow/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["comfyflow"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "function"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+]

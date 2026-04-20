@@ -1,0 +1,139 @@
+import json
+import uuid
+import httpx
+import struct
+import websockets
+from PIL import Image
+from io import BytesIO
+from pathlib import Path
+from typing import Dict, List, Union, Any
+from .registry import SchemaRegistry
+
+class ComfyClient:
+
+    def __init__(self, server_address: str = "127.0.0.1:8188"):
+        self.server_address = server_address
+        self.client_id = str(uuid.uuid4())
+        self.registry = SchemaRegistry()
+        self.models: Dict[str, List[str]] = {}
+
+    async def init(self):
+        await self.registry.fetch()
+
+        # pre-load models
+        model_types = ["checkpoints", "loras", "vaes", "diffusion_models"]
+        async with httpx.AsyncClient() as client:
+            for m_type in model_types:
+                response = await client.get(f"http://{self.server_address}/models/{m_type}")
+                if response.status_code == 200:
+                    self.models[m_type] = response.json()
+
+    @property
+    def checkpoints(self) -> List[str]:
+        return self.models.get("checkpoints", [])
+
+    @property
+    def loras(self) -> List[str]:
+        return self.models.get("loras", [])
+
+    @property
+    def vaes(self) -> List[str]:
+        return self.models.get("vaes", [])
+
+    @property
+    def diffusion_models(self) -> List[str]:
+        return self.models.get("diffusion_models", [])
+
+    @staticmethod
+    def decode_comfy_image(binary_data):
+        if len(binary_data) < 8:
+            return None
+
+        # read the event type (first 4 bytes)
+        event_type = struct.unpack(">I", binary_data[:4])[0]
+
+        # event_type == 1 is for PREVIEW_IMAGE
+        if event_type != 1:
+            return None
+
+        # extract image data (skip first 8 bytes)
+        image_bytes = binary_data[8:]
+        return Image.open(BytesIO(image_bytes))
+
+    async def ensure_images_uploaded(self, workflow):
+        for node, key, value in workflow.iter_uploads():
+            result = await self.upload_image(value)
+            node.inputs[key] = result["name"]
+
+    async def upload_image(self, image: Union[str, Path, bytes], filename: str | None = None, overwrite: bool = True) -> Dict[str, Any]:
+        url = f"http://{self.server_address}/upload/image"
+
+        files = {}
+        if isinstance(image, (str, Path)):
+            path = Path(image)
+            if not filename:
+                filename = path.name
+            files = {"image": (filename, open(path, "rb"), "image/png")}
+        else:
+            if not filename:
+                filename = f"upload_{uuid.uuid4()}.png"
+            files = {"image": (filename, BytesIO(image), "image/png")}
+
+        data = {"overwrite": "true" if overwrite else "false"}
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, files=files, data=data)
+            response.raise_for_status()
+            return response.json()
+
+    async def run(self, workflow):
+        await self.ensure_images_uploaded(workflow)
+        prompt = workflow.to_api_json()
+        node_types = {node.id: node.schema.name for node in workflow.nodes}
+
+        async def get_prompt_id(client):
+            response = await client.post(
+                f"http://{self.server_address}/prompt",
+                json={"prompt": prompt, "client_id": self.client_id}
+            )
+            if response.status_code != 200:
+                raise RuntimeError(f"ComfyUI Error: {response.json()}")
+            return response.json()["prompt_id"]
+
+        async def fetch_images(client, output_data):
+            for img_info in output_data.get("images", []):
+                img_res = await client.get(
+                    f"http://{self.server_address}/view",
+                    params={
+                        "filename": img_info["filename"],
+                        "subfolder": img_info["subfolder"],
+                        "type": img_info["type"]
+                    }
+                )
+                if img_res.status_code == 200:
+                    yield Image.open(BytesIO(img_res.content))
+
+        ws_url = f"ws://{self.server_address}/ws?clientId={self.client_id}"
+        async with httpx.AsyncClient() as client, websockets.connect(ws_url) as ws:
+            prompt_id = await get_prompt_id(client)
+            current_node_id = None
+
+            async for message in ws:
+                if not isinstance(message, str):
+                    # decode binary image (PreviewImage)
+                    if current_node_id and node_types.get(str(current_node_id)) == "PreviewImage":
+                        image = ComfyClient.decode_comfy_image(message)
+                        if image:
+                            yield str(current_node_id), image
+                    continue
+
+                msg = json.loads(message)
+                if msg["type"] == "executing":
+                    current_node_id = msg["data"]["node"]
+                    if current_node_id is None and msg["data"]["prompt_id"] == prompt_id:
+                        break # Execution finished
+
+                if msg["type"] == "executed" and msg["data"]["prompt_id"] == prompt_id:
+                    node_id = msg["data"]["node"]
+                    async for image in fetch_images(client, msg["data"]["output"]):
+                        yield str(node_id), image
