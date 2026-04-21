@@ -34,18 +34,16 @@ async def workflow():
     # Mock registry with direct node injection
     mock_registry = MagicMock()
     mock_registry.nodes = {}
-    
+
     # Manually populate the mock registry
     from comfyflow.registry import SchemaRegistry
     # We can just create a real registry instance and inject the data
-    registry = SchemaRegistry()
-    registry._parse(MOCK_SCHEMA)
-    
+    registry = SchemaRegistry(MOCK_SCHEMA)
+
     mock_cli.registry = registry
-    
+
     wf = Workflow(mock_cli)
     return wf
-
 
 @pytest.mark.asyncio
 async def test_workflow_initialization(workflow):
