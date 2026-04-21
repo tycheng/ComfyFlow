@@ -1,11 +1,8 @@
+import argparse
 from random import randint
-from comfyflow import ComfyClient, Workflow
+from comfyflow import AsyncComfyClient, ComfyClient, Workflow
 
-async def main():
-    cli = ComfyClient()
-
-    await cli.init()
-
+def build_workflow(cli):
     wf = Workflow(cli)
 
     # nodes are dynamically available based on your ComfyUI instance's schema
@@ -26,14 +23,29 @@ async def main():
         denoise=1.0
     )
     image = wf.VAEDecode(samples=sample, vae=ckpt.VAE)
-
     wf.PreviewImage(images=image)
+    return wf
 
-    # run the workflow and wait for the result
-    async for node_id, image in wf.run():
+def sync_main():
+    cli = ComfyClient.create()
+    wf = build_workflow(cli)
+    for node_id, image in cli.run(wf):
+        print(f"Received image from node {node_id}")
+        image.show()
+
+async def async_main():
+    cli = await AsyncComfyClient.create()
+    wf = build_workflow(cli)
+    async for node_id, image in cli.run(wf):
         print(f"Received image from node {node_id}")
         image.show()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--async", dest="async_mode", action="store_true", help="run in async mode")
+    args = parser.parse_args()
+    if args.async_mode:
+        import asyncio
+        asyncio.run(async_main())
+    else:
+        sync_main()

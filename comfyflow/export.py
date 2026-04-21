@@ -3,15 +3,15 @@ from .models import OutputRef, NodeOutputs
 
 def resolve_input(value: Any) -> Any:
     if isinstance(value, NodeOutputs):
-        # Default to the first output if the whole NodeOutputs object is passed
+        # default to the first output if the whole NodeOutputs object is passed
         return value[0]
     return value
 
-def to_api_json(workflow: 'Workflow') -> Dict[str, Any]:
+def to_api_json(workflow) -> Dict[str, Any]:
     api_format = {}
     for node in workflow.nodes:
-        # Ensure ID is a string of an integer
-        node_id = str(int(node.id)) 
+        # ensure ID is a string of an integer
+        node_id = str(int(node.id))
         node_data = {
             "class_type": node.schema.name,
             "inputs": {}
@@ -19,13 +19,12 @@ def to_api_json(workflow: 'Workflow') -> Dict[str, Any]:
         for key, raw_value in node.inputs.items():
             value = resolve_input(raw_value)
             if isinstance(value, OutputRef):
-                # Ensure connection format is [node_id, slot_index]
+                # ensure connection format is [node_id, slot_index]
                 node_data["inputs"][key] = [str(int(value.node.id)), value.slot]
             else:
                 node_data["inputs"][key] = value
         api_format[node_id] = node_data
     return api_format
-
 
 def to_ui_json(workflow) -> Dict[str, Any]:
     # standard comfyui .json format is complex, this is a simplified version

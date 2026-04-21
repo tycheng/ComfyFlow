@@ -1,33 +1,31 @@
+import os
 import json
 import uuid
 import httpx
 import struct
-import websockets
+import asyncio
 import mimetypes
+import websockets
 from PIL import Image
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Union, Any
 from .registry import SchemaRegistry
 
-class ComfyClient:
+# async client
+class AsyncComfyClient:
 
     def __init__(self, server_address: str = "127.0.0.1:8188"):
         self.server_address = server_address
         self.client_id = str(uuid.uuid4())
-        self.registry = SchemaRegistry()
+        self.registry = SchemaRegistry({})
         self.models: Dict[str, List[str]] = {}
 
-    async def init(self):
-        await self.registry.fetch()
-
-        # pre-load models
-        model_types = ["checkpoints", "loras", "vaes", "diffusion_models"]
-        async with httpx.AsyncClient() as client:
-            for m_type in model_types:
-                response = await client.get(f"http://{self.server_address}/models/{m_type}")
-                if response.status_code == 200:
-                    self.models[m_type] = response.json()
+    @staticmethod
+    async def create(server_address: str = "127.0.0.1:8188"):
+        cli = AsyncComfyClient(server_address)
+        await cli.init()
+        return cli
 
     @property
     def checkpoints(self) -> List[str]:
@@ -61,12 +59,29 @@ class ComfyClient:
         image_bytes = binary_data[8:]
         return Image.open(BytesIO(image_bytes))
 
+    async def init(self):
+        # pre-load models
+        model_types = ["checkpoints", "loras", "vaes", "diffusion_models"]
+        async with httpx.AsyncClient() as client:
+            for m_type in model_types:
+                response = await client.get(f"http://{self.server_address}/models/{m_type}")
+                if response.status_code == 200:
+                    self.models[m_type] = response.json()
+
+        # pre-load schema
+        url = f"http://{self.server_address}/object_info"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+            self.registry = SchemaRegistry(data)
+
     async def ensure_images_uploaded(self, workflow):
         for node, key, value in workflow.iter_uploads():
             result = await self.upload_image(value)
             # update node input with the path relative to input folder (name + subfolder)
             if result.get("subfolder"):
-                node.inputs[key] = f"{result['subfolder']}/{result['name']}"
+                node.inputs[key] = os.path.join(result['subfolder'], result['name'])
             else:
                 node.inputs[key] = result["name"]
 
@@ -142,7 +157,7 @@ class ComfyClient:
                 if not isinstance(message, str):
                     # decode binary image (PreviewImage)
                     if current_node_id and node_types.get(str(current_node_id)) == "PreviewImage":
-                        image = ComfyClient.decode_comfy_image(message)
+                        image = AsyncComfyClient.decode_comfy_image(message)
                         if image:
                             yield str(current_node_id), image
                     continue
@@ -159,3 +174,51 @@ class ComfyClient:
                     if output:
                         async for image in fetch_images(client, output):
                             yield str(node_id), image
+
+# sync client
+class ComfyClient:
+
+    def __init__(self, server_address: str = "127.0.0.1:8188"):
+        self.wrapper = AsyncComfyClient(server_address)
+        asyncio.run(self.wrapper.init())
+
+    @staticmethod
+    def create(server_address: str = "127.0.0.1:8188"):
+        return ComfyClient(server_address)
+
+    @property
+    def registry(self) -> SchemaRegistry:
+        return self.wrapper.registry
+
+    @property
+    def checkpoints(self) -> List[str]:
+        return self.wrapper.checkpoints
+
+    @property
+    def loras(self) -> List[str]:
+        return self.wrapper.loras
+
+    @property
+    def vaes(self) -> List[str]:
+        return self.wrapper.vaes
+
+    @property
+    def diffusion_models(self) -> List[str]:
+        return self.wrapper.diffusion_models
+
+    def run(self, workflow):
+        async def run_and_yield():
+            async for node_id, image in self.wrapper.run(workflow):
+                yield node_id, image
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            gen = run_and_yield()
+            while True:
+                try:
+                    yield loop.run_until_complete(gen.__anext__())
+                except StopAsyncIteration:
+                    break
+        finally:
+            loop.close()

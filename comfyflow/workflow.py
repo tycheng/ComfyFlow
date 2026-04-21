@@ -1,7 +1,7 @@
-from typing import Any, Dict, List, Union, Tuple
-from pathlib import Path
 from PIL import Image
-from .client import ComfyClient
+from pathlib import Path
+from typing import Any, Dict, List
+from .client import ComfyClient, AsyncComfyClient
 from .models import NodeSchema, NodeInstance, NodeOutputs
 
 def is_image_upload_field(input_info: Any) -> bool:
@@ -61,7 +61,7 @@ class NodeFactory:
 
 class Workflow:
 
-    def __init__(self, client: ComfyClient):
+    def __init__(self, client: ComfyClient | AsyncComfyClient):
         self.nodes: List[NodeInstance] = []
         self.client = client
 
@@ -76,10 +76,6 @@ class Workflow:
     def to_ui_json(self) -> Dict[str, Any]:
         from .export import to_ui_json
         return to_ui_json(self)
-
-    async def run(self):
-        async for output in self.client.run(self):
-            yield output
 
     def iter_uploads(self):
         for node in self.nodes:

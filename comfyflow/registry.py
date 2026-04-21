@@ -1,22 +1,10 @@
-import httpx
 from typing import Dict, Any
 from .models import NodeSchema
 
 class SchemaRegistry:
 
-    def __init__(self, server_address: str = "127.0.0.1:8188"):
-        self.server_address = server_address
+    def __init__(self, data: Dict[str, Any]):
         self.nodes: Dict[str, NodeSchema] = {}
-
-    async def fetch(self):
-        url = f"http://{self.server_address}/object_info"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            data = response.json()
-            self._parse(data)
-
-    def _parse(self, data: Dict[str, Any]):
         for name, info in data.items():
             inputs = info.get("input", {})
             required = inputs.get("required", {})
