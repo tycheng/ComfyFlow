@@ -7,16 +7,22 @@ ComfyFlow is a Python package for building and executing ComfyUI node graphs pro
 1. **Fluent API**: Build ComfyUI workflows using a natural, method-call syntax. No more manual JSON construction.
 2. **Live Previews**: The `run()` method is an async generator that yields images as they are ready, including intermediate `PreviewImage` snapshots.
 3. **Model Discovery**: Easily access lists of available `checkpoints`, `loras`, `vaes`, and `diffusion_models` directly from the client.
-4. **Strict Validation**: Validates your workflow against the actual ComfyUI node schema (inputs, types, and enum values) before sending it.
+4. **Smart Validation**:
+   - **Strict Keyword Check**: Ensures all keyword arguments match the node schema.
+   - **Default Value Support**: Automatically fills in missing arguments with schema defaults.
+   - **Range Validation**: Validates `min`/`max` constraints for numeric inputs.
+   - **Enum Validation**: Ensures list-based options (like samplers or schedulers) are valid.
 5. **Dynamic Schema**: Queries your local ComfyUI instance to automatically support all installed custom nodes and extensions.
-6. **Export Options**: 
+6. **Export Options**:
    - Export to API JSON format for direct ComfyUI execution.
    - Export to UI JSON format with basic auto-layout for manual editing in the ComfyUI web interface.
 
 ## Installation
 
+### From Git (Latest)
+To install the latest development version directly from GitHub using `uv`:
 ```bash
-uv add comfyflow
+uv add git+https://github.com/tycheng/ComfyFlow.git
 ```
 
 ## Usage Example
@@ -31,7 +37,7 @@ async def main():
 
     # 2. Access available models
     print(f"Checkpoints: {cli.checkpoints}")
-    
+
     # 3. Create a workflow
     wf = Workflow(cli)
 
@@ -82,7 +88,7 @@ async def main():
         # 'image' is a PIL.Image object
         print(f"Received image from node {node_id}")
         image.show()
-    
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(main())
@@ -104,6 +110,6 @@ ui_json = wf.to_ui_json()
 
 ## How it works
 
-ComfyFlow queries `http://127.0.0.1:8188/object_info` to understand the schema of all available nodes. It then uses this information to provide a dynamic API where each node is a method on the `Workflow` class. 
+ComfyFlow queries `http://127.0.0.1:8188/object_info` to understand the schema of all available nodes. It then uses this information to provide a dynamic API where each node is a method on the `Workflow` class.
 
 The `run()` method establishes a WebSocket connection to ComfyUI, allowing it to stream live progress and binary image data directly to your Python application.

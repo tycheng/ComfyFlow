@@ -18,13 +18,36 @@ MOCK_SCHEMA = {
     "CLIPTextEncode": {
         "input": {
             "required": {
-                "text": ["STRING", {"multiline": True}],
+                "text": ["STRING", {"multiline": True, "default": "default prompt"}],
                 "clip": ["CLIP", {}]
             }
         },
         "output": ["CONDITIONING"],
         "name": "CLIPTextEncode",
         "category": "conditioning"
+    },
+    "EmptyLatentImage": {
+        "input": {
+            "required": {
+                "width": ["INT", {"default": 512, "min": 64, "max": 4096}],
+                "height": ["INT", {"default": 512, "min": 64, "max": 4096}],
+                "batch_size": ["INT", {"default": 1, "min": 1, "max": 64}]
+            }
+        },
+        "output": ["LATENT"],
+        "name": "EmptyLatentImage",
+        "category": "latent"
+    },
+    "SamplerCustom": {
+        "input": {
+            "required": {
+                "sampler_name": [["euler", "euler_ancestral", "heun"], {"default": "euler"}],
+                "scheduler": [["normal", "karras", "simple"], {"default": "normal"}]
+            }
+        },
+        "output": ["SAMPLER"],
+        "name": "SamplerCustom",
+        "category": "sampling"
     }
 }
 
@@ -58,6 +81,32 @@ async def test_node_creation(workflow):
     assert isinstance(ckpt.clip, OutputRef)
 
 @pytest.mark.asyncio
+async def test_default_values(workflow):
+    # EmptyLatentImage has defaults for all fields
+    latent = workflow.EmptyLatentImage()
+    assert latent._node.inputs["width"] == 512
+    assert latent._node.inputs["height"] == 512
+    assert latent._node.inputs["batch_size"] == 1
+
+    # CLIPTextEncode has default for text but clip is required (no default)
+    ckpt = workflow.CheckpointLoaderSimple(ckpt_name="anything.safetensors")
+    encode = workflow.CLIPTextEncode(clip=ckpt.clip)
+    assert encode._node.inputs["text"] == "default prompt"
+
+@pytest.mark.asyncio
+async def test_range_validation(workflow):
+    # Below min
+    with pytest.raises(ValueError, match="is below minimum 64"):
+        workflow.EmptyLatentImage(width=32)
+
+    # Above max
+    with pytest.raises(ValueError, match="is above maximum 4096"):
+        workflow.EmptyLatentImage(height=5000)
+
+    # Valid
+    workflow.EmptyLatentImage(width=1024)
+
+@pytest.mark.asyncio
 async def test_validation_invalid_input(workflow):
     # This now fails earlier due to missing required input
     with pytest.raises(ValueError, match="requires input 'ckpt_name'"):
@@ -71,6 +120,21 @@ async def test_validation_invalid_input(workflow):
 async def test_validation_invalid_enum(workflow):
     with pytest.raises(ValueError, match="Invalid value 'wrong.safetensors'"):
         workflow.CheckpointLoaderSimple(ckpt_name="wrong.safetensors")
+
+@pytest.mark.asyncio
+async def test_multi_enum_validation(workflow):
+    # Valid
+    sampler = workflow.SamplerCustom(sampler_name="euler_ancestral", scheduler="karras")
+    assert sampler._node.inputs["sampler_name"] == "euler_ancestral"
+    assert sampler._node.inputs["scheduler"] == "karras"
+
+    # Invalid sampler_name
+    with pytest.raises(ValueError, match="Invalid value 'ddim' for 'sampler_name'"):
+        workflow.SamplerCustom(sampler_name="ddim")
+
+    # Invalid scheduler
+    with pytest.raises(ValueError, match="Invalid value 'exponential' for 'scheduler'"):
+        workflow.SamplerCustom(scheduler="exponential")
 
 @pytest.mark.asyncio
 async def test_api_export(workflow):
