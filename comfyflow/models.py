@@ -21,6 +21,7 @@ class NodeInstance:
     inputs: Dict[str, Any] = field(default_factory=dict)
     # used for layout
     pos: List[float] = field(default_factory=lambda: [0.0, 0.0])
+    size: List[float] = field(default_factory=lambda: [210.0, 80.0])
 
 @dataclass
 class OutputRef:

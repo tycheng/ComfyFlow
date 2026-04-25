@@ -92,8 +92,8 @@ class NodeFactory:
 
         node = NodeInstance(id=node_id, schema=self.schema, inputs=ordered_inputs)
 
-        # basic auto-layout: stagger nodes horizontally
-        node.pos = [200 * (len(self.workflow.nodes) % 5), 200 * (len(self.workflow.nodes) // 5)]
+        # default position, will be calculated during export if not changed
+        node.pos = [0.0, 0.0]
 
         self.workflow.nodes.append(node)
         return NodeOutputs(node)
