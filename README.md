@@ -64,9 +64,9 @@ async def main():
 
     sample = wf.KSampler(
         model=ckpt.MODEL,
-        positive=pos,
-        negative=neg,
-        latent_image=latent,
+        positive=pos.CONDITIONING,
+        negative=neg.CONDITIONING,
+        latent_image=latent.LATENT,
         steps=20,
         cfg=7.5,
         sampler_name="euler",
@@ -75,12 +75,12 @@ async def main():
     )
 
     image = wf.VAEDecode(
-        samples=sample,
+        samples=sample.LATENT,
         vae=ckpt.VAE
     )
 
     # Optional: Add a preview node to get live updates during sampling
-    wf.PreviewImage(images=image)
+    wf.PreviewImage(images=image.IMAGE)
 
     # 4. Run the workflow and receive images as they are ready
     async for node_id, image in wf.run():

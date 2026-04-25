@@ -27,9 +27,9 @@ def build_workflow(cli):
     latent = wf.VAEEncode(pixels=image.IMAGE, vae=ckpt.VAE)
     sample = wf.KSampler(
         model=ckpt.MODEL,
-        positive=pos,
-        negative=neg,
-        latent_image=latent,
+        positive=pos.CONDITIONING,
+        negative=neg.CONDITIONING,
+        latent_image=latent.LATENT,
         steps=20,
         cfg=5.5,
         seed=randint(0, 0xffffffff),
@@ -37,21 +37,27 @@ def build_workflow(cli):
         scheduler="simple",
         denoise=0.9
     )
-    image = wf.VAEDecode(samples=sample, vae=ckpt.VAE)
-    wf.PreviewImage(images=image)
+    image = wf.VAEDecode(samples=sample.LATENT, vae=ckpt.VAE)
+    wf.PreviewImage(images=image.IMAGE)
     return wf
+
+def on_progress(node_id, node_type, current, total, is_step):
+    if is_step:
+        print(f"  - Node {node_id} progress: {current}/{total}")
+    else:
+        print(f"[{current}/{total}] Executing: {node_type} (ID: {node_id})")
 
 def sync_main():
     cli = ComfyClient.create()
     wf = build_workflow(cli)
-    for node_id, image in cli.run(wf):
+    for node_id, image in cli.run(wf, on_progress=on_progress):
         print(f"Received image from node {node_id}")
         image.show()
 
 async def async_main():
     cli = await AsyncComfyClient.create()
     wf = build_workflow(cli)
-    async for node_id, image in cli.run(wf):
+    async for node_id, image in cli.run(wf, on_progress=on_progress):
         print(f"Received image from node {node_id}")
         image.show()
 

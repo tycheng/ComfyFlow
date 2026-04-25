@@ -121,9 +121,11 @@ class AsyncComfyClient:
             response.raise_for_status()
             return response.json()
 
-    async def run(self, workflow):
+    async def run(self, workflow, on_progress=None):
         await self.ensure_images_uploaded(workflow)
         prompt = workflow.to_api_json()
+        total_nodes = len(prompt)
+        nodes_executed = 0
         node_types = {node.id: node.schema.name for node in workflow.nodes}
 
         async def get_prompt_id(client):
@@ -148,6 +150,16 @@ class AsyncComfyClient:
                 if img_res.status_code == 200:
                     yield Image.open(BytesIO(img_res.content))
 
+        def _call_progress(node_id, current, total, is_step):
+            if on_progress:
+                import inspect
+                node_type = node_types.get(str(node_id)) if node_id else None
+                if inspect.iscoroutinefunction(on_progress):
+                    return on_progress(str(node_id), node_type, current, total, is_step)
+                else:
+                    on_progress(str(node_id), node_type, current, total, is_step)
+            return None
+
         ws_url = f"ws://{self.server_address}/ws?clientId={self.client_id}"
         async with httpx.AsyncClient() as client, websockets.connect(ws_url) as ws:
             prompt_id = await get_prompt_id(client)
@@ -164,9 +176,23 @@ class AsyncComfyClient:
 
                 msg = json.loads(message)
                 if msg["type"] == "executing":
-                    current_node_id = msg["data"]["node"]
-                    if current_node_id is None and msg["data"]["prompt_id"] == prompt_id:
+                    data = msg["data"]
+                    if data["prompt_id"] != prompt_id:
+                        continue
+
+                    current_node_id = data["node"]
+                    if current_node_id is None:
                         break # execution finished
+
+                    nodes_executed += 1
+                    res = _call_progress(current_node_id, nodes_executed, total_nodes, is_step=False)
+                    if res: await res
+
+                if msg["type"] == "progress":
+                    data = msg["data"]
+                    if data["prompt_id"] == prompt_id:
+                        res = _call_progress(current_node_id, data["value"], data["max"], is_step=True)
+                        if res: await res
 
                 if msg["type"] == "executed" and msg["data"]["prompt_id"] == prompt_id:
                     node_id = msg["data"]["node"]
@@ -174,6 +200,14 @@ class AsyncComfyClient:
                     if output:
                         async for image in fetch_images(client, output):
                             yield str(node_id), image
+
+                if msg["type"] == "execution_error":
+                    if msg["data"]["prompt_id"] == prompt_id:
+                        raise RuntimeError(f"ComfyUI Execution Error: {msg['data']}")
+
+                if msg["type"] == "execution_interrupted":
+                    if msg["data"]["prompt_id"] == prompt_id:
+                        raise RuntimeError("ComfyUI Execution Interrupted")
 
 # sync client
 class ComfyClient:
@@ -206,9 +240,9 @@ class ComfyClient:
     def diffusion_models(self) -> List[str]:
         return self.wrapper.diffusion_models
 
-    def run(self, workflow):
+    def run(self, workflow, on_progress=None):
         async def run_and_yield():
-            async for node_id, image in self.wrapper.run(workflow):
+            async for node_id, image in self.wrapper.run(workflow, on_progress=on_progress):
                 yield node_id, image
 
         loop = asyncio.new_event_loop()
