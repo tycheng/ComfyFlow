@@ -168,3 +168,15 @@ async def test_ui_export(workflow):
     assert len(ui_json["nodes"]) == 2
     assert len(ui_json["links"]) == 1
     assert ui_json["nodes"][0]["type"] == "CheckpointLoaderSimple"
+
+    # Check link details
+    link = ui_json["links"][0]
+    # [id, node_from, slot_from, node_to, slot_to, type]
+    assert link[1] == 1 # from node 1
+    assert link[2] == 1 # from slot 1 (CLIP)
+    assert link[3] == 2 # to node 2
+    assert link[4] == 0 # to slot 0 (in UI inputs array)
+    assert link[5] == "CLIP"
+
+    # Check output links list
+    assert 1 in ui_json["nodes"][0]["outputs"][1]["links"]

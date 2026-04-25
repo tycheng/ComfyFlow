@@ -30,7 +30,7 @@ def to_ui_json(workflow) -> Dict[str, Any]:
     # standard comfyui .json format is complex, this is a simplified version
     # that many loaders can still handle, or used as a base.
     ui_format = {
-        "last_node_id": len(workflow.nodes),
+        "last_node_id": 0,
         "last_link_id": 0,
         "nodes": [],
         "links": [],
@@ -43,14 +43,20 @@ def to_ui_json(workflow) -> Dict[str, Any]:
     links = []
     link_id_counter = 1
 
+    # map node_id -> node_ui for easy access
+    node_map = {}
+    max_node_id = 0
+
     for node in workflow.nodes:
+        node_id_int = int(node.id)
+        max_node_id = max(max_node_id, node_id_int)
         node_ui = {
-            "id": int(node.id),
+            "id": node_id_int,
             "type": node.schema.name,
             "pos": node.pos,
             "size": [210, 80], # default size
             "flags": {},
-            "order": int(node.id),
+            "order": node_id_int,
             "mode": 0,
             "inputs": [],
             "outputs": [],
@@ -63,23 +69,24 @@ def to_ui_json(workflow) -> Dict[str, Any]:
             node_ui["outputs"].append({
                 "name": name,
                 "type": type_name,
-                "links": [] # will fill later
+                "links": []
             })
 
-        # inputs and widgets
-        # in UI format, some inputs are widgets and some are links
+        node_map[node.id] = node_ui
+        ui_format["nodes"].append(node_ui)
+
+    # second pass to create links and fill inputs/outputs
+    for node in workflow.nodes:
+        node_ui = node_map[node.id]
+
         for key, raw_value in node.inputs.items():
             value = resolve_input(raw_value)
             if isinstance(value, OutputRef):
                 link_id = link_id_counter
                 link_id_counter += 1
 
-                # find slot index for the input
-                input_slot = 0
-                for idx, k in enumerate(node.schema.inputs.keys()):
-                    if k == key:
-                        input_slot = idx
-                        break
+                # the target slot is the index in the node's "inputs" array in UI
+                input_slot = len(node_ui["inputs"])
 
                 links.append([
                     link_id,
@@ -95,12 +102,16 @@ def to_ui_json(workflow) -> Dict[str, Any]:
                     "type": value.type,
                     "link": link_id
                 })
+
+                # also register this link in the output node
+                origin_node_ui = node_map[value.node.id]
+                if value.slot < len(origin_node_ui["outputs"]):
+                    origin_node_ui["outputs"][value.slot]["links"].append(link_id)
             else:
                 # widget value
                 node_ui["widgets_values"].append(value)
 
-        ui_format["nodes"].append(node_ui)
-
     ui_format["links"] = links
+    ui_format["last_node_id"] = max_node_id
     ui_format["last_link_id"] = link_id_counter - 1
     return ui_format
