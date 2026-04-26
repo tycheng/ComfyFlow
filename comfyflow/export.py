@@ -18,15 +18,15 @@ def compute_node_layout(nodes: List[NodeInstance]):
     def get_depth(node_id):
         if node_id in depths:
             return depths[node_id]
-        
+
         node = node_map[node_id]
         max_input_depth = -1
-        
+
         for raw_value in node.inputs.values():
             value = resolve_input(raw_value)
             if isinstance(value, OutputRef):
                 max_input_depth = max(max_input_depth, get_depth(value.node.id))
-        
+
         depth = max_input_depth + 1
         depths[node_id] = depth
         return depth
@@ -50,16 +50,16 @@ def compute_node_layout(nodes: List[NodeInstance]):
 
     # 3. Assign positions
     sorted_depths = sorted(columns.keys())
-    
+
     horizontal_spacing = 300
     padding_y = 50
-    
+
     for x_idx, d in enumerate(sorted_depths):
         current_y = 0.0
         for node in columns[d]:
             if node.pos == [0.0, 0.0]:
                 node.pos = [float(x_idx * horizontal_spacing), current_y]
-            
+
             # Move current_y down by node height + padding
             current_y += node.size[1] + padding_y
 
@@ -81,6 +81,13 @@ def to_api_json(workflow) -> Dict[str, Any]:
                 node_data["inputs"][key] = value
         api_format[node_id] = node_data
     return api_format
+
+def is_widget_type(type_info):
+    if isinstance(type_info, list):
+        return True
+    if isinstance(type_info, str) and type_info in ("INT", "FLOAT", "STRING", "BOOLEAN"):
+        return True
+    return False
 
 def to_ui_json(workflow) -> Dict[str, Any]:
     # Compute layout before exporting
@@ -138,8 +145,13 @@ def to_ui_json(workflow) -> Dict[str, Any]:
     for node in workflow.nodes:
         node_ui = node_map[node.id]
 
-        for key, raw_value in node.inputs.items():
+        # ComfyUI UI JSON expects inputs and widgets in a specific order defined by the schema.
+        # We must iterate over all schema inputs to maintain this order.
+        for key, input_info in node.schema.inputs.items():
+            type_info = input_info[0]
+            raw_value = node.inputs.get(key)
             value = resolve_input(raw_value)
+
             if isinstance(value, OutputRef):
                 link_id = link_id_counter
                 link_id_counter += 1
@@ -166,9 +178,28 @@ def to_ui_json(workflow) -> Dict[str, Any]:
                 origin_node_ui = node_map[value.node.id]
                 if value.slot < len(origin_node_ui["outputs"]):
                     origin_node_ui["outputs"][value.slot]["links"].append(link_id)
-            else:
+
+            elif is_widget_type(type_info):
                 # widget value
+                if value is None:
+                    # Fallback to default from schema if not provided
+                    metadata = input_info[1] if len(input_info) > 1 else {}
+                    value = metadata.get("default")
+
                 node_ui["widgets_values"].append(value)
+
+                # Special case: seed widgets often have an associated "control_after_generate"
+                # widget in the UI that is not explicitly in the object_info schema.
+                if (key == "seed" or key == "noise_seed") and type_info == "INT":
+                    node_ui["widgets_values"].append("randomize")
+
+            else:
+                # Port that is not connected
+                node_ui["inputs"].append({
+                    "name": key,
+                    "type": str(type_info),
+                    "link": None
+                })
 
     ui_format["links"] = links
     ui_format["last_node_id"] = max_node_id

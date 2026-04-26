@@ -175,6 +175,12 @@ class AsyncComfyClient:
                     continue
 
                 msg = json.loads(message)
+                if msg["type"] == "execution_cached":
+                    data = msg["data"]
+                    if data["prompt_id"] == prompt_id:
+                        cached_nodes = data.get("nodes", [])
+                        total_nodes = max(1, total_nodes - len(cached_nodes))
+
                 if msg["type"] == "executing":
                     data = msg["data"]
                     if data["prompt_id"] != prompt_id:
