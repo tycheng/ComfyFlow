@@ -36,12 +36,16 @@ class AsyncComfyClient:
         return self.models.get("loras", [])
 
     @property
-    def vaes(self) -> List[str]:
-        return self.models.get("vaes", [])
+    def vae(self) -> List[str]:
+        return self.models.get("vae", [])
 
     @property
     def diffusion_models(self) -> List[str]:
         return self.models.get("diffusion_models", [])
+
+    @property
+    def text_encoders(self) -> List[str]:
+        return self.models.get("text_encoders", [])
 
     @staticmethod
     def decode_comfy_image(binary_data):
@@ -61,7 +65,7 @@ class AsyncComfyClient:
 
     async def init(self):
         # pre-load models
-        model_types = ["checkpoints", "loras", "vaes", "diffusion_models"]
+        model_types = ["checkpoints", "loras", "vae", "diffusion_models", "text_encoders"]
         async with httpx.AsyncClient() as client:
             for m_type in model_types:
                 response = await client.get(f"http://{self.server_address}/models/{m_type}")
