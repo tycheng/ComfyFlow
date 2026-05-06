@@ -19,6 +19,13 @@ ComfyFlow is a Python package for building and executing ComfyUI node graphs pro
 
 ## Installation
 
+### From PyPI
+
+[pypi](https://pypi.org/project/comfyflow/)
+```
+uv add comfyflow
+```
+
 ### From Git (Latest)
 To install the latest development version directly from GitHub using `uv`:
 ```bash
