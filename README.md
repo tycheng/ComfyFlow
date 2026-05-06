@@ -22,7 +22,7 @@ ComfyFlow is a Python package for building and executing ComfyUI node graphs pro
 ### From Git (Latest)
 To install the latest development version directly from GitHub using `uv`:
 ```bash
-uv add git+https://github.com/tycheng/ComfyFlow.git
+uv add git+https://github.com/TianyuCheng/ComfyFlow.git
 ```
 
 ## Usage Example
