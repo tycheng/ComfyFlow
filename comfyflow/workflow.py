@@ -1,6 +1,6 @@
 from PIL import Image
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 from .client import ComfyClient, AsyncComfyClient
 from .models import NodeSchema, NodeInstance, NodeOutputs, OutputRef
 
@@ -100,7 +100,7 @@ class NodeFactory:
 
 class Workflow:
 
-    def __init__(self, client: ComfyClient | AsyncComfyClient):
+    def __init__(self, client: Union[ComfyClient, AsyncComfyClient]):
         self.nodes: List[NodeInstance] = []
         self.client = client
 
