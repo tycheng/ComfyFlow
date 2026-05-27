@@ -48,7 +48,7 @@ async def async_main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--async", dest="async_mode", action="store_true", help="run in async mode")
+    parser.add_argument("--async-mode", dest="async_mode", action="store_true", help="run in async mode")
     args = parser.parse_args()
     if args.async_mode:
         import asyncio

@@ -101,6 +101,23 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Video Generation
+
+ComfyFlow now supports automatic video uploading and downloading using `moviepy`.
+
+### Text-to-Video (LTX-2.3)
+Generate a high-quality upscaled video from a prompt:
+```bash
+uv run examples/ltx23_t2v.py --server 192.168.50.103:8188 --prompt "A futuristic city at night" --output ./outputs
+```
+
+### Image-to-Video (LTX-2.3)
+Animate a local image into a high-quality video:
+```bash
+uv run examples/ltx23_i2v.py --server 192.168.50.103:8188 --image examples/data/to-upload.png --output ./outputs
+```
+
+
 ## Advanced Usage
 
 ### Accessing Node Outputs

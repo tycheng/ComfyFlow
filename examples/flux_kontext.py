@@ -113,10 +113,10 @@ if __name__ == "__main__":
     parser.add_argument("--output", help="Directory to save output images")
 
     # Model arguments
-    parser.add_argument("--clip_l", default="clip_l.safetensors", help="CLIP-L model name")
+    parser.add_argument("--clip-l", default="clip_l.safetensors", help="CLIP-L model name")
     parser.add_argument("--t5xxl", default="t5xxl_fp8_e4m3fn_scaled.safetensors", help="T5XXL model name")
-    parser.add_argument("--vae_name", default="flux-kontext-ae.safetensors", help="VAE model name")
-    parser.add_argument("--unet_name", default="redcraftCADSUpdatedJUN29_redKKingOfHearts.safetensors", help="UNET model name")
+    parser.add_argument("--vae-name", default="flux-kontext-ae.safetensors", help="VAE model name")
+    parser.add_argument("--unet-name", default="redcraftCADSUpdatedJUN29_redKKingOfHearts.safetensors", help="UNET model name")
 
     # Generation arguments
     parser.add_argument("--image", default="examples/data/to-upload.png", help="Path to input image")

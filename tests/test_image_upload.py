@@ -23,10 +23,10 @@ def registry():
     return reg
 
 @pytest.fixture
-def mock_client(registry):
+def mock_client(registry, comfyui_host):
     client = MagicMock()
     client.registry = registry
-    client.server_address = "127.0.0.1:8188"
+    client.server_address = comfyui_host
     client.upload_image = AsyncMock(return_value={"name": "uploaded_image.png"})
     # client.run is already async generator if needed, but we mostly test workflow setup here
     return client
@@ -51,7 +51,7 @@ async def test_load_image_validation(registry, mock_client, tmp_path):
     assert node._node.inputs["image"] == str(test_file)
 
 @pytest.mark.asyncio
-async def test_transparent_upload(registry, mock_client, tmp_path):
+async def test_transparent_upload(registry, mock_client, tmp_path, comfyui_host):
     wf = Workflow(mock_client)
     test_file = tmp_path / "upload_me.png"
     test_file.write_text("data")
@@ -59,18 +59,18 @@ async def test_transparent_upload(registry, mock_client, tmp_path):
     wf.LoadImage(image=str(test_file))
 
     # mocking what comfyclient.run does
-    real_client = await AsyncComfyClient.create()
+    real_client = await AsyncComfyClient.create(comfyui_host)
     real_client.upload_image = AsyncMock(return_value={"name": "uploaded_file.png"})
 
-    await real_client.ensure_images_uploaded(wf)
+    await real_client.ensure_media_uploaded(wf)
 
     assert wf.nodes[0].inputs["image"] == "uploaded_file.png"
     real_client.upload_image.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_explicit_upload(mock_client):
+async def test_explicit_upload(mock_client, comfyui_host):
     from comfyflow.client import AsyncComfyClient
-    client = await AsyncComfyClient.create()
+    client = await AsyncComfyClient.create(comfyui_host)
 
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_post.return_value = MagicMock(status_code=200)
@@ -81,10 +81,10 @@ async def test_explicit_upload(mock_client):
         mock_post.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_pil_image_upload():
+async def test_pil_image_upload(comfyui_host):
     from PIL import Image
     from comfyflow.client import AsyncComfyClient
-    client = await AsyncComfyClient.create()
+    client = await AsyncComfyClient.create(comfyui_host)
 
     img = Image.new("RGB", (64, 64), color="red")
 
