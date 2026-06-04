@@ -43,7 +43,7 @@ class AsyncComfyClient:
         return self.models.get("loras", [])
 
     @property
-    def vae(self) -> List[str]:
+    def vaes(self) -> List[str]:
         return self.models.get("vae", [])
 
     @property
@@ -363,7 +363,21 @@ class AsyncComfyClient:
             fd, temp_path = tempfile.mkstemp(suffix=suffix)
             with os.fdopen(fd, 'wb') as f:
                 f.write(data)
-            return VideoFileClip(temp_path)
+            
+            clip = VideoFileClip(temp_path)
+            
+            # Monkeypatch close to ensure temp file is deleted
+            original_close = clip.close
+            def patched_close():
+                original_close()
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+            clip.close = patched_close
+            
+            return clip
         except Exception as e:
             print(f"Warning: Failed to open video {filename}: {e}")
             return BytesIO(data)
@@ -399,6 +413,10 @@ class ComfyClient:
     @property
     def diffusion_models(self) -> List[str]:
         return self.wrapper.diffusion_models
+
+    @property
+    def text_encoders(self) -> List[str]:
+        return self.wrapper.text_encoders
 
     def run(self, workflow, on_progress=None):
         """Runs the workflow synchronously and yields outputs."""
